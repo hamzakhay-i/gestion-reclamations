@@ -103,15 +103,19 @@
                             placeholder="Retapez votre mot de passe" required minlength="6">
                     </div>
 
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label for="register-role" class="form-label">
                             <i class="bi bi-people me-1"></i>Rôle
                         </label>
                         <select class="form-select" id="register-role">
                             <option value="client">Client</option>
                             <option value="agent">Agent</option>
-                            <option value="admin">Administrateur</option>
                         </select>
+                    </div>
+
+                    <div id="agent-notice" class="mb-4 hidden" style="background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 0.75rem; font-size: 0.82rem; color: #f59e0b;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Les comptes agents doivent être approuvés par l'administrateur avant de pouvoir se connecter.
                     </div>
 
                     <button type="submit" class="btn btn-primary-custom w-100 py-2">

@@ -1,6 +1,7 @@
 /**
  * public/js/auth.js - Gestion de l'authentification côté client
  * Login et inscription avec appels API
+ * Gère l'affichage de l'avis pour les agents en attente d'approbation
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -17,6 +18,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const showLoginBtn = document.getElementById('show-login');
     const loginCard = document.getElementById('login-card');
     const registerCard = document.getElementById('register-card');
+    const roleSelect = document.getElementById('register-role');
+    const agentNotice = document.getElementById('agent-notice');
+
+    // ========================
+    // Afficher/masquer l'avis agent
+    // ========================
+    if (roleSelect && agentNotice) {
+        roleSelect.addEventListener('change', () => {
+            if (roleSelect.value === 'agent') {
+                agentNotice.classList.remove('hidden');
+            } else {
+                agentNotice.classList.add('hidden');
+            }
+        });
+    }
 
     // ========================
     // Basculer entre login et inscription
@@ -66,7 +82,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.message);
+                    // Si le compte est en attente d'approbation
+                    if (data.pending) {
+                        showToast(data.message, 'warning');
+                    } else {
+                        throw new Error(data.message);
+                    }
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Se connecter';
+                    return;
                 }
 
                 // Sauvegarder les données d'auth et rediriger
@@ -128,7 +152,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error(data.message);
                 }
 
-                // Sauvegarder et rediriger
+                // Si c'est un agent en attente, afficher le message et retourner au login
+                if (data.pending) {
+                    showToast(data.message, 'info');
+                    setTimeout(() => {
+                        registerCard.classList.add('hidden');
+                        loginCard.classList.remove('hidden');
+                        loginCard.classList.add('fade-in');
+                    }, 2000);
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="bi bi-person-plus-fill me-2"></i>S\'inscrire';
+                    registerForm.reset();
+                    return;
+                }
+
+                // Client : sauvegarder et rediriger
                 saveAuth(data.token, data.user);
                 showToast('Inscription réussie ! Bienvenue !', 'success');
 

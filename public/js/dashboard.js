@@ -1,6 +1,6 @@
 /**
  * public/js/dashboard.js - Logique du tableau de bord
- * Affiche les statistiques et la liste des réclamations selon le rôle
+ * Affiche les statistiques, réclamations, et gestion des utilisateurs (admin)
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -16,6 +16,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Charger les stats pour admin/agent
     if (user.role === 'admin' || user.role === 'agent') {
         await loadStats();
+    }
+
+    // Charger les utilisateurs et agents en attente pour l'admin
+    if (user.role === 'admin') {
+        await loadPendingAgents();
+        await loadAllUsers();
     }
 });
 
@@ -41,8 +47,6 @@ async function loadStats() {
 
 /**
  * Animation de compteur pour les statistiques
- * @param {string} elementId - ID de l'élément
- * @param {number} target - Valeur cible
  */
 function animateCounter(elementId, target) {
     const element = document.getElementById(elementId);
@@ -62,6 +66,211 @@ function animateCounter(elementId, target) {
             element.textContent = Math.floor(current);
         }
     }, 16);
+}
+
+/**
+ * Charger les agents en attente d'approbation (admin)
+ */
+async function loadPendingAgents() {
+    try {
+        const data = await apiRequest('/auth/pending-agents');
+        if (!data) return;
+
+        const container = document.getElementById('pending-agents-list');
+        const countBadge = document.getElementById('pending-count');
+        if (!container) return;
+
+        if (countBadge) {
+            countBadge.textContent = data.agents.length;
+        }
+
+        if (data.agents.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-3 text-muted" style="font-size: 0.85rem;">
+                    <i class="bi bi-check-circle me-1"></i>Aucun agent en attente
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = data.agents.map(agent => `
+            <div class="agent-pending-card">
+                <div class="agent-info">
+                    <div class="agent-avatar">
+                        ${agent.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <div class="agent-name">${escapeHtml(agent.name)}</div>
+                        <div class="agent-email">${escapeHtml(agent.email)}</div>
+                        <div class="agent-date"><i class="bi bi-clock me-1"></i>${formatDate(agent.created_at)}</div>
+                    </div>
+                </div>
+                <div class="agent-actions">
+                    <button class="btn btn-sm btn-success-custom" onclick="approveAgent(${agent.id})" title="Approuver">
+                        <i class="bi bi-check-lg me-1"></i>Approuver
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="rejectAgent(${agent.id})" title="Refuser">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Erreur chargement agents en attente:', error);
+    }
+}
+
+/**
+ * Charger la liste de tous les utilisateurs (admin)
+ */
+async function loadAllUsers() {
+    try {
+        const data = await apiRequest('/auth/users');
+        if (!data) return;
+
+        const container = document.getElementById('users-list');
+        if (!container) return;
+
+        const currentUser = getUser();
+
+        container.innerHTML = `
+            <div class="table-responsive">
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>Utilisateur</th>
+                            <th>Email</th>
+                            <th>Rôle</th>
+                            <th>Statut</th>
+                            <th>Inscrit le</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.users.map(u => `
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="user-avatar-sm ${u.role}">${u.name.charAt(0).toUpperCase()}</div>
+                                        <span>${escapeHtml(u.name)}</span>
+                                    </div>
+                                </td>
+                                <td class="text-muted-cell">${escapeHtml(u.email)}</td>
+                                <td>
+                                    <span class="badge role-badge-${u.role}">
+                                        ${u.role === 'admin' ? '<i class="bi bi-shield-fill me-1"></i>' : ''}
+                                        ${u.role === 'agent' ? '<i class="bi bi-headset me-1"></i>' : ''}
+                                        ${u.role === 'client' ? '<i class="bi bi-person me-1"></i>' : ''}
+                                        ${u.role}
+                                    </span>
+                                </td>
+                                <td>
+                                    ${u.is_active 
+                                        ? '<span class="status-active"><i class="bi bi-circle-fill me-1"></i>Actif</span>'
+                                        : '<span class="status-inactive"><i class="bi bi-circle-fill me-1"></i>Inactif</span>'
+                                    }
+                                </td>
+                                <td class="text-muted-cell">${formatDate(u.created_at)}</td>
+                                <td>
+                                    ${u.id !== currentUser.id ? `
+                                        <div class="d-flex gap-1">
+                                            ${!u.is_active ? `
+                                                <button class="btn btn-xs btn-success-custom" onclick="activateUser(${u.id})" title="Activer">
+                                                    <i class="bi bi-check-lg"></i>
+                                                </button>
+                                            ` : `
+                                                <button class="btn btn-xs btn-outline-warning-custom" onclick="deactivateUser(${u.id})" title="Désactiver">
+                                                    <i class="bi bi-pause-fill"></i>
+                                                </button>
+                                            `}
+                                            <button class="btn btn-xs btn-outline-danger" onclick="deleteUserAdmin(${u.id}, '${escapeHtml(u.name)}')" title="Supprimer">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    ` : '<span class="text-muted" style="font-size:0.75rem;">Vous</span>'}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Erreur chargement utilisateurs:', error);
+    }
+}
+
+/**
+ * Approuver un agent en attente
+ */
+async function approveAgent(id) {
+    try {
+        await apiRequest(`/auth/activate/${id}`, { method: 'PUT' });
+        showToast('Agent approuvé avec succès', 'success');
+        await loadPendingAgents();
+        await loadAllUsers();
+    } catch (error) {
+        showToast(error.message || 'Erreur d\'approbation', 'danger');
+    }
+}
+
+/**
+ * Refuser (supprimer) un agent en attente
+ */
+async function rejectAgent(id) {
+    if (!confirm('Êtes-vous sûr de vouloir refuser cet agent ? Son compte sera supprimé.')) return;
+    try {
+        await apiRequest(`/auth/users/${id}`, { method: 'DELETE' });
+        showToast('Agent refusé et supprimé', 'success');
+        await loadPendingAgents();
+        await loadAllUsers();
+    } catch (error) {
+        showToast(error.message || 'Erreur de refus', 'danger');
+    }
+}
+
+/**
+ * Activer un utilisateur
+ */
+async function activateUser(id) {
+    try {
+        await apiRequest(`/auth/activate/${id}`, { method: 'PUT' });
+        showToast('Utilisateur activé', 'success');
+        await loadAllUsers();
+        await loadPendingAgents();
+    } catch (error) {
+        showToast(error.message || 'Erreur', 'danger');
+    }
+}
+
+/**
+ * Désactiver un utilisateur
+ */
+async function deactivateUser(id) {
+    if (!confirm('Désactiver cet utilisateur ? Il ne pourra plus se connecter.')) return;
+    try {
+        await apiRequest(`/auth/deactivate/${id}`, { method: 'PUT' });
+        showToast('Utilisateur désactivé', 'success');
+        await loadAllUsers();
+    } catch (error) {
+        showToast(error.message || 'Erreur', 'danger');
+    }
+}
+
+/**
+ * Supprimer un utilisateur (admin)
+ */
+async function deleteUserAdmin(id, name) {
+    if (!confirm(`Supprimer l'utilisateur "${name}" ? Cette action est irréversible.`)) return;
+    try {
+        await apiRequest(`/auth/users/${id}`, { method: 'DELETE' });
+        showToast('Utilisateur supprimé', 'success');
+        await loadAllUsers();
+        await loadPendingAgents();
+        await loadStats();
+    } catch (error) {
+        showToast(error.message || 'Erreur de suppression', 'danger');
+    }
 }
 
 /**
@@ -145,8 +354,6 @@ async function loadReclamations() {
 
 /**
  * Mettre à jour le statut d'une réclamation
- * @param {number} id - ID de la réclamation
- * @param {string} status - Nouveau statut
  */
 async function updateStatus(id, status) {
     try {
@@ -169,7 +376,6 @@ async function updateStatus(id, status) {
 
 /**
  * Supprimer une réclamation (admin uniquement)
- * @param {number} id - ID de la réclamation
  */
 async function deleteReclamation(id) {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette réclamation ?')) return;
@@ -189,8 +395,6 @@ async function deleteReclamation(id) {
 
 /**
  * Échapper les caractères HTML
- * @param {string} text - Texte à échapper
- * @returns {string} Texte échappé
  */
 function escapeHtml(text) {
     const div = document.createElement('div');

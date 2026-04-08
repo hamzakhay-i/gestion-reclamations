@@ -1,6 +1,7 @@
 /**
  * controllers/authController.js - Contrôleur d'authentification
  * Gère l'inscription, la connexion et le profil utilisateur
+ * Les agents doivent être approuvés par l'admin avant de pouvoir se connecter
  */
 
 const bcrypt = require('bcryptjs');
@@ -12,6 +13,8 @@ const AuthController = {
     /**
      * Inscription d'un nouvel utilisateur
      * POST /api/auth/register
+     * Les agents sont créés en mode inactif (is_active = false)
+     * Seuls client et agent peuvent s'inscrire (l'admin existe par défaut)
      */
     async register(req, res) {
         try {
@@ -32,18 +35,33 @@ const AuthController = {
                 });
             }
 
-            // Valider le rôle
-            const validRoles = ['client', 'agent', 'admin'];
-            const userRole = validRoles.includes(role) ? role : 'client';
+            // Seuls client et agent peuvent s'inscrire (admin ne peut pas s'auto-inscrire)
+            const allowedRoles = ['client', 'agent'];
+            const userRole = allowedRoles.includes(role) ? role : 'client';
 
             // Hasher le mot de passe avec bcrypt
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash(password, salt);
 
-            // Créer l'utilisateur
+            // Créer l'utilisateur (les agents seront is_active = false)
             const result = await UserModel.create(name, email, hashedPassword, userRole);
 
-            // Générer le token JWT
+            // Si c'est un agent, ne pas retourner de token (doit attendre l'activation)
+            if (userRole === 'agent') {
+                return res.status(201).json({
+                    message: 'Inscription réussie. Votre compte agent est en attente d\'approbation par l\'administrateur.',
+                    pending: true,
+                    user: {
+                        id: result.insertId,
+                        name,
+                        email,
+                        role: userRole,
+                        is_active: false
+                    }
+                });
+            }
+
+            // Pour les clients : générer le token JWT directement
             const token = jwt.sign(
                 { id: result.insertId, email, role: userRole },
                 JWT_SECRET,
@@ -57,7 +75,8 @@ const AuthController = {
                     id: result.insertId,
                     name,
                     email,
-                    role: userRole
+                    role: userRole,
+                    is_active: true
                 }
             });
         } catch (error) {
@@ -69,6 +88,7 @@ const AuthController = {
     /**
      * Connexion d'un utilisateur existant
      * POST /api/auth/login
+     * Vérifie que le compte est actif avant d'autoriser la connexion
      */
     async login(req, res) {
         try {
@@ -94,6 +114,14 @@ const AuthController = {
             if (!isPasswordValid) {
                 return res.status(401).json({
                     message: 'Email ou mot de passe incorrect.'
+                });
+            }
+
+            // Vérifier que le compte est actif (surtout pour les agents)
+            if (!user.is_active) {
+                return res.status(403).json({
+                    message: 'Votre compte est en attente d\'approbation par l\'administrateur. Veuillez patienter.',
+                    pending: true
                 });
             }
 
@@ -133,6 +161,106 @@ const AuthController = {
             res.json({ user });
         } catch (error) {
             console.error('Erreur profil:', error);
+            res.status(500).json({ message: 'Erreur serveur.' });
+        }
+    },
+
+    /**
+     * Récupérer les agents en attente d'activation (admin)
+     * GET /api/auth/pending-agents
+     */
+    async getPendingAgents(req, res) {
+        try {
+            const agents = await UserModel.findPendingAgents();
+            res.json({ agents });
+        } catch (error) {
+            console.error('Erreur pending agents:', error);
+            res.status(500).json({ message: 'Erreur serveur.' });
+        }
+    },
+
+    /**
+     * Récupérer tous les utilisateurs (admin)
+     * GET /api/auth/users
+     */
+    async getAllUsers(req, res) {
+        try {
+            const users = await UserModel.findAll();
+            res.json({ users });
+        } catch (error) {
+            console.error('Erreur users:', error);
+            res.status(500).json({ message: 'Erreur serveur.' });
+        }
+    },
+
+    /**
+     * Activer un compte agent (admin)
+     * PUT /api/auth/activate/:id
+     */
+    async activateUser(req, res) {
+        try {
+            const { id } = req.params;
+            const user = await UserModel.findById(id);
+
+            if (!user) {
+                return res.status(404).json({ message: 'Utilisateur non trouvé.' });
+            }
+
+            await UserModel.activate(id);
+            res.json({ message: `Compte de ${user.name} activé avec succès.` });
+        } catch (error) {
+            console.error('Erreur activation:', error);
+            res.status(500).json({ message: 'Erreur serveur.' });
+        }
+    },
+
+    /**
+     * Désactiver un compte (admin)
+     * PUT /api/auth/deactivate/:id
+     */
+    async deactivateUser(req, res) {
+        try {
+            const { id } = req.params;
+            const user = await UserModel.findById(id);
+
+            if (!user) {
+                return res.status(404).json({ message: 'Utilisateur non trouvé.' });
+            }
+
+            // Empêcher l'admin de se désactiver lui-même
+            if (user.id === req.user.id) {
+                return res.status(400).json({ message: 'Vous ne pouvez pas désactiver votre propre compte.' });
+            }
+
+            await UserModel.deactivate(id);
+            res.json({ message: `Compte de ${user.name} désactivé.` });
+        } catch (error) {
+            console.error('Erreur désactivation:', error);
+            res.status(500).json({ message: 'Erreur serveur.' });
+        }
+    },
+
+    /**
+     * Supprimer un utilisateur (admin)
+     * DELETE /api/auth/users/:id
+     */
+    async deleteUser(req, res) {
+        try {
+            const { id } = req.params;
+            const user = await UserModel.findById(id);
+
+            if (!user) {
+                return res.status(404).json({ message: 'Utilisateur non trouvé.' });
+            }
+
+            if (user.id === req.user.id) {
+                return res.status(400).json({ message: 'Vous ne pouvez pas supprimer votre propre compte.' });
+            }
+
+            await UserModel.delete(id);
+            res.json({ message: `Utilisateur ${user.name} supprimé.` });
+        } catch (error) {
+            console.error('Erreur suppression utilisateur:', error);
             res.status(500).json({ message: 'Erreur serveur.' });
         }
     }

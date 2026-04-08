@@ -4,6 +4,7 @@
  */
 
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcryptjs');
 
 // Configuration de la connexion MySQL
 const DB_CONFIG = {
@@ -32,6 +33,7 @@ const getPool = () => {
 
 /**
  * Initialiser la base de données et créer les tables si elles n'existent pas
+ * Crée aussi un compte administrateur par défaut
  */
 const initDatabase = async () => {
     // Connexion sans spécifier de base de données pour la créer
@@ -49,7 +51,7 @@ const initDatabase = async () => {
     // Utiliser la base de données
     await connection.changeUser({ database: DB_CONFIG.database });
 
-    // Créer la table users
+    // Créer la table users avec colonne is_active
     await connection.execute(`
         CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -57,9 +59,20 @@ const initDatabase = async () => {
             email VARCHAR(150) NOT NULL UNIQUE,
             password VARCHAR(255) NOT NULL,
             role ENUM('client', 'agent', 'admin') DEFAULT 'client',
+            is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    // Ajouter la colonne is_active si elle n'existe pas (migration pour les DB existantes)
+    try {
+        await connection.execute(`
+            ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE
+        `);
+        console.log('📦 Colonne is_active ajoutée');
+    } catch (e) {
+        // La colonne existe déjà, ignorer l'erreur
+    }
 
     // Créer la table reclamations
     await connection.execute(`
@@ -87,6 +100,23 @@ const initDatabase = async () => {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     `);
+
+    // ========================
+    // Créer le compte admin par défaut s'il n'existe pas
+    // ========================
+    const [adminRows] = await connection.execute(
+        "SELECT id FROM users WHERE email = 'admin@sgr.com'"
+    );
+
+    if (adminRows.length === 0) {
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash('admin123', salt);
+        await connection.execute(
+            "INSERT INTO users (name, email, password, role, is_active) VALUES (?, ?, ?, ?, ?)",
+            ['Administrateur', 'admin@sgr.com', hashedPassword, 'admin', true]
+        );
+        console.log('👤 Compte admin créé : admin@sgr.com / admin123');
+    }
 
     await connection.end();
     console.log('📦 Tables créées / vérifiées avec succès');

@@ -1,6 +1,6 @@
 /**
  * public/js/suivi.js - Page de suivi des réclamations
- * Affiche la liste des réclamations avec les réponses
+ * Affiche les réclamations avec un système de chat/discussion en bulles
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -64,20 +64,23 @@ async function loadSuiviReclamations() {
                     </div>
                 </div>
                 <div class="suivi-content" id="content-${rec.id}">
-                    <div class="responses-container" id="responses-${rec.id}">
+                    <div class="chat-container" id="chat-${rec.id}">
                         <div class="text-center py-3">
                             <span class="spinner-border spinner-border-sm"></span>
-                            <span class="ms-2">Chargement des réponses...</span>
+                            <span class="ms-2">Chargement de la discussion...</span>
                         </div>
                     </div>
-                    <div class="response-form-container">
-                        <form onsubmit="submitResponse(event, ${rec.id})" class="response-form">
-                            <div class="input-group">
-                                <input type="text" class="form-control" 
+                    <div class="chat-input-container">
+                        <form onsubmit="submitResponse(event, ${rec.id})" class="chat-form">
+                            <div class="chat-input-wrapper">
+                                <textarea class="chat-input" 
                                     id="response-input-${rec.id}" 
-                                    placeholder="Écrire une réponse..."
-                                    required>
-                                <button type="submit" class="btn btn-primary-custom">
+                                    placeholder="Écrire un message..."
+                                    rows="1"
+                                    required
+                                    onkeydown="handleChatKeydown(event, ${rec.id})"
+                                    oninput="autoResize(this)"></textarea>
+                                <button type="submit" class="chat-send-btn" title="Envoyer">
                                     <i class="bi bi-send-fill"></i>
                                 </button>
                             </div>
@@ -94,7 +97,6 @@ async function loadSuiviReclamations() {
 
 /**
  * Basculer l'affichage du contenu d'une réclamation (accordion)
- * @param {number} recId - ID de la réclamation
  */
 async function toggleReclamation(recId) {
     const content = document.getElementById(`content-${recId}`);
@@ -119,11 +121,10 @@ async function toggleReclamation(recId) {
 }
 
 /**
- * Charger les réponses d'une réclamation
- * @param {number} recId - ID de la réclamation
+ * Charger les réponses d'une réclamation — format chat/bulles
  */
 async function loadResponses(recId) {
-    const container = document.getElementById(`responses-${recId}`);
+    const container = document.getElementById(`chat-${recId}`);
     if (!container) return;
 
     try {
@@ -132,38 +133,67 @@ async function loadResponses(recId) {
 
         if (data.responses.length === 0) {
             container.innerHTML = `
-                <div class="no-responses">
-                    <i class="bi bi-chat-left-text"></i>
-                    <p>Aucune réponse pour le moment</p>
+                <div class="chat-empty">
+                    <i class="bi bi-chat-dots"></i>
+                    <p>Aucun message pour le moment</p>
+                    <span>Commencez la discussion !</span>
                 </div>
             `;
             return;
         }
 
         const user = getUser();
+        let lastDate = '';
 
-        container.innerHTML = data.responses.map(resp => `
-            <div class="response-item ${resp.user_id === user.id ? 'own-response' : ''}">
-                <div class="response-header">
-                    <span class="response-author">
-                        <i class="bi bi-person-circle me-1"></i>
-                        ${escapeHtml(resp.user_name)}
-                        <span class="response-role badge bg-${resp.user_role === 'admin' ? 'danger' : resp.user_role === 'agent' ? 'info' : 'secondary'} ms-1">
-                            ${resp.user_role}
-                        </span>
-                    </span>
-                    <span class="response-date">
-                        <i class="bi bi-clock me-1"></i>${formatDate(resp.created_at)}
-                    </span>
-                </div>
-                <div class="response-body">
-                    ${escapeHtml(resp.message)}
-                </div>
-            </div>
-        `).join('');
+        container.innerHTML = data.responses.map(resp => {
+            const isOwn = resp.user_id === user.id;
+            const messageDate = new Date(resp.created_at).toLocaleDateString('fr-FR');
+            let dateSeparator = '';
 
-        // Scroll vers le bas des réponses
-        container.scrollTop = container.scrollHeight;
+            // Ajouter un séparateur de date si le jour change
+            if (messageDate !== lastDate) {
+                lastDate = messageDate;
+                dateSeparator = `
+                    <div class="chat-date-separator">
+                        <span>${messageDate === new Date().toLocaleDateString('fr-FR') ? "Aujourd'hui" : messageDate}</span>
+                    </div>
+                `;
+            }
+
+            // Couleur de l'avatar selon le rôle
+            const avatarClass = resp.user_role === 'admin' ? 'avatar-admin' 
+                : resp.user_role === 'agent' ? 'avatar-agent' 
+                : 'avatar-client';
+
+            return `
+                ${dateSeparator}
+                <div class="chat-message ${isOwn ? 'chat-own' : 'chat-other'}">
+                    ${!isOwn ? `
+                        <div class="chat-avatar ${avatarClass}" title="${escapeHtml(resp.user_name)}">
+                            ${resp.user_name.charAt(0).toUpperCase()}
+                        </div>
+                    ` : ''}
+                    <div class="chat-bubble ${isOwn ? 'bubble-own' : 'bubble-other'}">
+                        ${!isOwn ? `
+                            <div class="chat-sender">
+                                <span class="sender-name">${escapeHtml(resp.user_name)}</span>
+                                <span class="sender-role role-${resp.user_role}">${resp.user_role}</span>
+                            </div>
+                        ` : ''}
+                        <div class="chat-text">${escapeHtml(resp.message)}</div>
+                        <div class="chat-time">
+                            ${new Date(resp.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                            ${isOwn ? '<i class="bi bi-check2-all ms-1"></i>' : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Scroll vers le bas des messages
+        requestAnimationFrame(() => {
+            container.scrollTop = container.scrollHeight;
+        });
     } catch (error) {
         container.innerHTML = `<p class="text-danger text-center">Erreur de chargement</p>`;
     }
@@ -171,8 +201,6 @@ async function loadResponses(recId) {
 
 /**
  * Soumettre une réponse à une réclamation
- * @param {Event} e - Événement du formulaire
- * @param {number} recId - ID de la réclamation
  */
 async function submitResponse(e, recId) {
     e.preventDefault();
@@ -191,13 +219,32 @@ async function submitResponse(e, recId) {
             })
         });
 
-        // Vider le champ et recharger les réponses
+        // Vider le champ, remettre à 1 ligne, et recharger les réponses
         input.value = '';
+        input.style.height = 'auto';
         await loadResponses(recId);
-        showToast('Réponse envoyée', 'success');
     } catch (error) {
         showToast(error.message || 'Erreur d\'envoi', 'danger');
     }
+}
+
+/**
+ * Gérer Entrée pour envoyer (Shift+Entrée pour nouvelle ligne)
+ */
+function handleChatKeydown(e, recId) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const form = e.target.closest('form');
+        if (form) form.requestSubmit();
+    }
+}
+
+/**
+ * Auto-resize du textarea en fonction du contenu
+ */
+function autoResize(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
 }
 
 /**

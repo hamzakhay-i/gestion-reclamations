@@ -12,42 +12,43 @@
    Variables CSS (Design System)
    ======================== */
 :root {
-    /* Couleurs principales */
-    --primary: #6366f1;
-    --primary-light: #818cf8;
-    --primary-dark: #4f46e5;
-    --primary-glow: rgba(99, 102, 241, 0.3);
+    /* Couleurs principales (Bleu) */
+    --primary: #2563eb;
+    --primary-light: #60a5fa;
+    --primary-dark: #1d4ed8;
+    --primary-glow: rgba(37, 99, 235, 0.2);
 
-    --accent: #06b6d4;
-    --accent-light: #22d3ee;
-    --accent-dark: #0891b2;
+    /* Accent (Vert) */
+    --accent: #10b981;
+    --accent-light: #34d399;
+    --accent-dark: #059669;
 
-    /* Couleurs de fond */
-    --bg-dark: #0f0f1a;
-    --bg-card: rgba(22, 22, 40, 0.85);
-    --bg-card-hover: rgba(30, 30, 55, 0.95);
-    --bg-input: rgba(30, 30, 55, 0.6);
-    --bg-glass: rgba(255, 255, 255, 0.03);
+    /* Couleurs de fond (Blanc) */
+    --bg-dark: #f4f6f9; /* changed to light grey-blue */
+    --bg-card: rgba(255, 255, 255, 0.95);
+    --bg-card-hover: rgba(255, 255, 255, 1);
+    --bg-input: #ffffff;
+    --bg-glass: rgba(255, 255, 255, 0.7);
 
-    /* Couleurs de texte */
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
+    /* Couleurs de texte (Sombre) */
+    --text-primary: #1e293b;
+    --text-secondary: #475569;
     --text-muted: #64748b;
 
     /* Couleurs de statut */
     --status-open: #f59e0b;
-    --status-progress: #06b6d4;
+    --status-progress: #3b82f6;
     --status-done: #10b981;
     --status-urgent: #ef4444;
 
     /* Bordures */
-    --border: rgba(99, 102, 241, 0.15);
-    --border-hover: rgba(99, 102, 241, 0.3);
+    --border: rgba(37, 99, 235, 0.15);
+    --border-hover: rgba(37, 99, 235, 0.35);
 
     /* Ombres */
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
-    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
     --shadow-glow: 0 0 20px var(--primary-glow);
 
     /* Transitions */
@@ -87,9 +88,9 @@ body::before {
     width: 100%;
     height: 100%;
     background: 
-        radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 20%, rgba(6, 182, 212, 0.06) 0%, transparent 50%),
-        radial-gradient(ellipse at 50% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+        radial-gradient(ellipse at 20% 50%, rgba(37, 99, 235, 0.05) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(16, 185, 129, 0.05) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(59, 130, 246, 0.04) 0%, transparent 50%);
     pointer-events: none;
     z-index: 0;
 }
@@ -118,13 +119,14 @@ body::before {
    Navigation
    ======================== */
 .navbar-custom {
-    background: rgba(15, 15, 26, 0.95);
+    background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--border);
     padding: 0.75rem 0;
     position: sticky;
     top: 0;
     z-index: 1000;
+    box-shadow: var(--shadow-sm);
 }
 
 .navbar-brand-custom {
